@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>DormMate - Night Edition</title>
+    
+    <!-- Tailwind CSS (Styling) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif; 
+            user-select: none; 
+            -webkit-user-select: none;
+            overflow: hidden; 
+            touch-action: none; /* Prevent elastic scrolling on iOS */
+        }
+        
+        /* Animations */
+        @keyframes floatUp { 0% { transform: translateY(0) rotate(0deg); opacity: 0; } 10% { opacity: 0.8; } 100% { transform: translateY(-100vh) rotate(20deg); opacity: 0; } }
+        @keyframes sway { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+        @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 15px rgba(16, 185, 129, 0.2); } 50% { box-shadow: 0 0 25px rgba(16, 185, 129, 0.6); } }
+
+        .animate-float { animation: floatUp 15s linear infinite; }
+        .animate-sway { animation: sway 3s ease-in-out infinite; transform-origin: top center; }
+        
+        /* Glassmorphism */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px); /* Safari support */
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+        
+        .neon-text { text-shadow: 0 0 10px rgba(255,255,255,0.5); }
+        
+        /* Range Slider Styling */
+        input[type=range] { -webkit-appearance: none; background: transparent; }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%;
+            background: #818cf8; border: 2px solid rgba(255,255,255,0.8); cursor: pointer; margin-top: -6px;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 4px; cursor: pointer; background: rgba(255,255,255,0.2); border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-b from-indigo-950 via-slate-900 to-indigo-950 text-white h-screen w-screen relative">
+
+    <!-- Background Effects -->
+    <div id="bg-effects" class="absolute inset-0 pointer-events-none overflow-hidden z-0">
+        <!-- Floating Zs will be injected here -->
+        <div class="absolute top-0 w-full h-32 opacity-30">
+            <svg width="100%" height="100%" class="animate-sway">
+                <path d="M0,0 Q50,50 100,0 T200,0 T300,0 T400,0 T500,0 T600,0 T700,0 T800,0 T900,0 T1000,0 T1200,0" fill="none" stroke="white" stroke-width="2" />
+                <circle cx="10%" cy="25" r="4" fill="#FDE68A" class="animate-pulse" />
+                <circle cx="50%" cy="25" r="4" fill="#FDE68A" class="animate-pulse" />
+                <circle cx="90%" cy="25" r="4" fill="#FDE68A" class="animate-pulse" />
+            </svg>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div id="app" class="relative z-10 h-full w-full max-w-md mx-auto p-4 flex flex-col">
+        <!-- Content injected via JS -->
+    </div>
+
+    <script>
+        // --- DATA ---
+        const SCHOOLS = ["State University", "Tech Institute", "City College", "Art Academy"];
+        const GENDERS = ["Female", "Male", "Non-binary"];
+        
+        const SEED_USERS = [
+            { id: 1, name: "Alex Rivera", gender: "Male", major: "Comp Sci", bio: "Night owl coder.", cleanliness: 2, bedtime: 2, social: 2, noise: 5 },
+            { id: 2, name: "Sarah Chen", gender: "Female", major: "Biology", bio: "Quiet study only.", cleanliness: 5, bedtime: 0, social: 1, noise: 1 },
+            { id: 3, name: "Jordan Smith", gender: "Male", major: "Music", bio: "Let's jam!", cleanliness: 3, bedtime: 1, social: 5, noise: 5 },
+            { id: 4, name: "Taylor Doe", gender: "Non-binary", major: "Psych", bio: "Chill vibes.", cleanliness: 4, bedtime: 1, social: 3, noise: 3 },
+            { id: 5, name: "Casey Jones", gender: "Female", major: "Architecture", bio: "Studio life.", cleanliness: 1, bedtime: 2, social: 4, noise: 4 },
+            { id: 6, name: "Mike Ross", gender: "Male", major: "Pre-Law", bio: "Clean & Organized.", cleanliness: 5, bedtime: 1, social: 4, noise: 2 },
+            { id: 7, name: "Emily Blunt", gender: "Female", major: "Theater", bio: "Always rehearsing!", cleanliness: 2, bedtime: 2, social: 5, noise: 5 }
+        ];
+
+        // --- STATE ---
+        const state = {
+            view: 'onboarding', // onboarding, dashboard, chat
+            user: { name: '', school: SCHOOLS[0], gender: 'Female', clean: 3, noise: 3 },
+            matches: [],
+            chatPartner: null,
+            messages: [],
+            official: null,
+            dragStart: null,
+            dragOffset: 0
+        };
+
+        // --- APP RENDERER ---
+        const app = document.getElementById('app');
+
+        function render() {
+            app.innerHTML = ''; // Clear
+            
+            if (state.view === 'onboarding') renderOnboarding();
+            else if (state.view === 'dashboard') renderDashboard();
+            else if (state.view === 'chat') renderChat();
+            
+            lucide.createIcons(); // Refresh icons
+        }
+
+        // --- VIEWS ---
+
+        function renderOnboarding() {
+            app.innerHTML = `
+                <div class="flex-1 flex flex-col justify-center space-y-8 pt-10">
+                    <div class="text-center">
+                        <div class="inline-flex p-3 bg-indigo-500/20 rounded-full mb-4 ring-1 ring-indigo-400/50">
+                            <i data-lucide="bed-double" class="w-8 h-8 text-indigo-300"></i>
+                        </div>
+                        <h1 class="text-4xl font-bold text-white neon-text mb-2">DormMate</h1>
+                        <p class="text-indigo-200">Find your perfect match.</p>
+                    </div>
+
+                    <div class="glass-panel p-6 rounded-2xl space-y-4">
+                        <label class="text-xs text-indigo-300 uppercase font-bold">Your Profile</label>
+                        <input id="inp-name" type="text" placeholder="Your Name" value="${state.user.name}" class="w-full bg-black/20 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        
+                        <div class="grid grid-cols-2 gap-4">
+                            <select id="inp-school" class="bg-black/20 border border-white/10 rounded-xl p-3 text-white focus:outline-none">
+                                ${SCHOOLS.map(s => `<option class="text-black" value="${s}" ${s === state.user.school ? 'selected' : ''}>${s}</option>`).join('')}
+                            </select>
+                            <select id="inp-gender" class="bg-black/20 border border-white/10 rounded-xl p-3 text-white focus:outline-none">
+                                ${GENDERS.map(g => `<option class="text-black" value="${g}" ${g === state.user.gender ? 'selected' : ''}>${g}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="glass-panel p-6 rounded-2xl space-y-6">
+                        <label class="text-xs text-indigo-300 uppercase font-bold">Preferences</label>
+                        <div>
+                            <div class="flex justify-between text-xs mb-2"><span>Messy</span><span>Spotless</span></div>
+                            <input id="inp-clean" type="range" min="1" max="5" value="${state.user.clean}" class="w-full">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs mb-2"><span>Quiet</span><span>Loud</span></div>
+                            <input id="inp-noise" type="range" min="1" max="5" value="${state.user.noise}" class="w-full">
+                        </div>
+                    </div>
+
+                    <button onclick="saveProfile()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-indigo-500/30 transition-all active:scale-95">
+                        Start Matching
+                    </button>
+                </div>
+            `;
+            
+            // Re-attach input listeners to update state immediately
+            document.getElementById('inp-name').addEventListener('input', (e) => state.user.name = e.target.value);
+            document.getElementById('inp-school').addEventListener('change', (e) => state.user.school = e.target.value);
+            document.getElementById('inp-gender').addEventListener('change', (e) => state.user.gender = e.target.value);
+            document.getElementById('inp-clean').addEventListener('input', (e) => state.user.clean = parseInt(e.target.value));
+            document.getElementById('inp-noise').addEventListener('input', (e) => state.user.noise = parseInt(e.target.value));
+        }
+
+        function renderDashboard() {
+            // Filter Matches
+            const currentMatch = state.matches[0];
+            
+            let cardContent = '';
+            
+            if (state.official) {
+                // Official Roommate View
+                const p = state.official;
+                cardContent = `
+                    <div class="absolute inset-0 p-2">
+                        <div class="w-full h-full glass-panel rounded-3xl overflow-hidden flex flex-col border border-emerald-500 shadow-[0_0_30px_rgba(16,185,129,0.3)]">
+                            <div class="h-1/3 bg-emerald-500/20 flex flex-col items-center justify-center relative">
+                                <i data-lucide="crown" class="w-16 h-16 text-yellow-300 mb-2 drop-shadow-md"></i>
+                                <h2 class="text-2xl font-bold text-white">Official Roommate</h2>
+                            </div>
+                            <div class="p-6 flex-1 flex flex-col justify-between">
+                                <div>
+                                    <h3 class="text-3xl font-bold mb-1">${p.name}</h3>
+                                    <p class="text-indigo-200 mb-4">${p.major}</p>
+                                    <p class="italic text-white/80 border-l-2 border-emerald-500/50 pl-3">"${p.bio}"</p>
+                                </div>
+                                <div class="space-y-3">
+                                    <button onclick="openChat('${p.id}')" class="w-full bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-bold flex items-center justify-center gap-2">
+                                        <i data-lucide="message-circle" class="w-5 h-5"></i> Chat Room
+                                    </button>
+                                    <button onclick="resetDemo()" class="w-full text-emerald-200/60 hover:text-emerald-200 text-sm py-2">
+                                        Start Over
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else if (!currentMatch) {
+                // Empty State
+                cardContent = `
+                    <div class="flex flex-col items-center justify-center h-full text-center p-8">
+                        <div class="bg-indigo-500/20 p-4 rounded-full mb-4"><i data-lucide="search" class="w-8 h-8 text-indigo-300"></i></div>
+                        <h3 class="text-xl font-bold mb-2">No matches found</h3>
+                        <p class="text-indigo-200 mb-6">No ${state.user.gender} students found matching your criteria.</p>
+                        <button onclick="resetDemo()" class="text-indigo-400 hover:text-white underline">Reset Demo</button>
+                    </div>
+                `;
+            } else {
+                // Card Stack
+                const rotation = state.dragOffset * 0.05;
+                const transform = `translateX(${state.dragOffset}px) rotate(${rotation}deg)`;
+                
+                cardContent = `
+                    <div id="swipe-card" class="absolute inset-0 p-2 cursor-grab active:cursor-grabbing" 
+                         style="transform: ${transform}; transition: transform 0.1s;">
+                        <div class="w-full h-full glass-panel rounded-3xl overflow-hidden flex flex-col bg-indigo-900/80">
+                            <!-- Header -->
+                            <div class="h-32 flex flex-col items-center justify-center bg-gradient-to-b from-indigo-500/30 to-transparent relative">
+                                <span class="text-5xl font-bold text-white neon-text">${currentMatch.score}%</span>
+                                <span class="text-xs uppercase tracking-widest text-indigo-200 mt-1">Compatibility</span>
+                            </div>
+                            
+                            <!-- Body -->
+                            <div class="p-6 flex-1 flex flex-col relative">
+                                <!-- Stamps -->
+                                ${state.dragOffset > 80 ? '<div class="absolute top-4 left-4 border-4 border-emerald-400 text-emerald-400 font-bold text-4xl px-2 py-1 rounded rotate-[-12deg] z-50">CONNECT</div>' : ''}
+                                ${state.dragOffset < -80 ? '<div class="absolute top-4 right-4 border-4 border-rose-500 text-rose-500 font-bold text-4xl px-2 py-1 rounded rotate-[12deg] z-50">NOPE</div>' : ''}
+
+                                <div class="mb-4">
+                                    <h3 class="text-3xl font-bold text-white mb-1">${currentMatch.name}</h3>
+                                    <div class="flex items-center gap-2 text-indigo-200 text-sm">
+                                        <i data-lucide="user-circle-2" class="w-4 h-4"></i> ${currentMatch.major}
+                                    </div>
+                                </div>
+                                
+                                <p class="text-white/90 text-lg leading-relaxed mb-6 flex-1">"${currentMatch.bio}"</p>
+                                
+                                <div class="grid grid-cols-2 gap-3 mb-4">
+                                    <div class="bg-white/5 p-2 rounded text-center">
+                                        <div class="text-[10px] text-indigo-300 font-bold">CLEAN</div>
+                                        <div>${currentMatch.cleanliness}/5</div>
+                                    </div>
+                                    <div class="bg-white/5 p-2 rounded text-center">
+                                        <div class="text-[10px] text-indigo-300 font-bold">NOISE</div>
+                                        <div>${currentMatch.noise}/5</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Controls -->
+                    <div class="absolute bottom-6 w-full flex justify-center gap-8 pointer-events-none">
+                        <button onclick="handleSwipe('left')" class="pointer-events-auto w-16 h-16 rounded-full border-2 border-rose-500 text-rose-500 flex items-center justify-center hover:bg-rose-500/20 transition-colors bg-black/40 backdrop-blur">
+                            <i data-lucide="x" class="w-8 h-8"></i>
+                        </button>
+                        <button onclick="handleSwipe('right')" class="pointer-events-auto w-16 h-16 rounded-full border-2 border-emerald-500 text-emerald-500 flex items-center justify-center hover:bg-emerald-500/20 transition-colors bg-black/40 backdrop-blur shadow-[0_0_20px_rgba(16,185,129,0.3)]">
+                            <i data-lucide="message-circle" class="w-8 h-8"></i>
+                        </button>
+                    </div>
+                `;
+            }
+
+            // Header
+            app.innerHTML = `
+                <div class="flex justify-between items-center mb-4 pt-4">
+                    <div>
+                        <h1 class="text-xl font-bold text-white">Hi, ${state.user.name.split(' ')[0] || 'User'} 🌙</h1>
+                        <p class="text-xs text-indigo-300">${state.user.school}</p>
+                    </div>
+                    <button onclick="resetDemo()" class="p-2 hover:bg-white/10 rounded-full"><i data-lucide="rotate-ccw" class="w-5 h-5 text-indigo-300"></i></button>
+                </div>
+                <div class="flex-1 relative w-full h-full perspective">
+                    ${cardContent}
+                </div>
+            `;
+
+            // Attach drag listeners if card exists
+            const card = document.getElementById('swipe-card');
+            if (card) {
+                let startX = 0;
+                
+                const onMove = (x) => {
+                    if (!startX) return;
+                    state.dragOffset = x - startX;
+                    card.style.transform = `translateX(${state.dragOffset}px) rotate(${state.dragOffset * 0.05}deg)`;
+                    
+                    // Visual stamps logic could update here via DOM if needed for performance
+                    renderDashboard(); // Re-render to show stamps (simplified)
+                };
+
+                const onEnd = () => {
+                    if (state.dragOffset > 100) handleSwipe('right');
+                    else if (state.dragOffset < -100) handleSwipe('left');
+                    else {
+                        state.dragOffset = 0;
+                        renderDashboard(); // Reset
+                    }
+                    startX = 0;
+                };
+
+                // Mouse
+                card.addEventListener('mousedown', e => startX = e.clientX);
+                window.addEventListener('mousemove', e => startX && onMove(e.clientX));
+                window.addEventListener('mouseup', () => startX && onEnd());
+                
+                // Touch
+                card.addEventListener('touchstart', e => startX = e.touches[0].clientX);
+                card.addEventListener('touchmove', e => onMove(e.touches[0].clientX));
+                card.addEventListener('touchend', () => onEnd());
+            }
+        }
+
+        function renderChat() {
+            const p = state.chatPartner;
+            const msgs = state.messages;
+            const isOfficial = state.official && state.official.id === p.id;
+
+            app.innerHTML = `
+                <div class="h-full flex flex-col glass-panel rounded-2xl overflow-hidden mt-4">
+                    <div class="p-4 flex justify-between items-center bg-white/5 border-b border-white/10 ${isOfficial ? 'shadow-[0_0_15px_rgba(16,185,129,0.3)]' : ''}">
+                        <div class="flex items-center gap-3">
+                            <button onclick="goBack()" class="hover:bg-white/10 p-1 rounded-full"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
+                            <div>
+                                <h3 class="font-bold flex items-center gap-2">
+                                    ${p.name} 
+                                    ${isOfficial ? '<i data-lucide="party-popper" class="w-4 h-4 text-emerald-400"></i>' : ''}
+                                </h3>
+                                <p class="text-xs text-indigo-300">${p.major}</p>
+                            </div>
+                        </div>
+                        ${isOfficial 
+                            ? `<div class="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-500/30 flex gap-1"><i data-lucide="check" class="w-3 h-3"></i> Official</div>`
+                            : `<button onclick="requestMatch()" class="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg font-medium transition-colors">Request Match</button>`
+                        }
+                    </div>
+                    
+                    <div id="chat-box" class="flex-1 overflow-y-auto p-4 space-y-4">
+                        ${msgs.length === 0 ? `<div class="text-center text-indigo-400/50 mt-10 text-sm">Start the conversation!</div>` : ''}
+                        ${msgs.map(m => `
+                            <div class="flex ${m.sender === 'me' ? 'justify-end' : 'justify-start'}">
+                                <div class="max-w-[80%] p-3 rounded-2xl text-sm ${m.sender === 'me' ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-white/10 text-white border border-white/5 rounded-bl-none'}">
+                                    ${m.text}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    <form onsubmit="sendMessage(event)" class="p-3 bg-black/20 flex gap-2">
+                        <input id="chat-input" type="text" placeholder="Message..." class="flex-1 bg-white/5 border border-white/10 rounded-full px-4 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500" autocomplete="off">
+                        <button type="submit" class="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center hover:bg-indigo-500"><i data-lucide="send" class="w-4 h-4"></i></button>
+                    </form>
+                </div>
+            `;
+            
+            // Auto scroll
+            const chatBox = document.getElementById('chat-box');
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        // --- ACTIONS ---
+
+        function saveProfile() {
+            // FILTER: Gender must match
+            state.matches = SEED_USERS.filter(u => u.gender === state.user.gender).map(u => {
+                let score = 100;
+                score -= Math.abs(u.cleanliness - state.user.clean) * 10;
+                score -= Math.abs(u.noise - state.user.noise) * 10;
+                return { ...u, score: Math.max(0, score) };
+            }).sort((a, b) => b.score - a.score);
+
+            state.view = 'dashboard';
+            render();
+        }
+
+        function handleSwipe(dir) {
+            state.dragOffset = 0;
+            const current = state.matches[0];
+            if (dir === 'right') {
+                openChat(current.id);
+            } else {
+                state.matches.shift(); // Remove top
+                render();
+            }
+        }
+
+        function openChat(id) {
+            const partner = SEED_USERS.find(u => u.id == id); // Loose equality for demo IDs
+            state.chatPartner = partner;
+            state.view = 'chat';
+            // If new chat, empty messages
+            if (!state.messages.some(m => m.partnerId === id)) state.messages = []; 
+            render();
+        }
+
+        function goBack() {
+            state.view = 'dashboard';
+            render();
+        }
+
+        function sendMessage(e) {
+            e.preventDefault();
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if(!text) return;
+            
+            state.messages.push({ text, sender: 'me' });
+            input.value = '';
+            render();
+
+            // Mock AI Reply
+            setTimeout(() => {
+                const replies = ["Ideally I sleep around midnight.", "I'm super clean usually!", "Omg same!", "That sounds perfect to me."];
+                const randomReply = replies[Math.floor(Math.random() * replies.length)];
+                state.messages.push({ text: randomReply, sender: 'them' });
+                render();
+            }, 1500);
+        }
+
+        function requestMatch() {
+            state.messages.push({ text: "Requesting to match... 🤝", sender: 'me' });
+            render();
+            
+            setTimeout(() => {
+                state.messages.push({ text: "Yes! Let's be roomies! 🎉", sender: 'them' });
+                state.official = state.chatPartner;
+                // Clear other matches to show only official
+                state.matches = [state.chatPartner];
+                render();
+            }, 2000);
+        }
+
+        function resetDemo() {
+            // Direct reset without confirmation dialog to avoid blocking
+            state.view = 'onboarding';
+            state.user = { name: '', school: SCHOOLS[0], gender: 'Female', clean: 3, noise: 3 };
+            state.matches = [];
+            state.chatPartner = null;
+            state.messages = [];
+            state.official = null;
+            state.dragOffset = 0;
+            render();
+        }
+
+        // --- BACKGROUND ---
+        function initBackground() {
+            const container = document.getElementById('bg-effects');
+            for(let i=0; i<10; i++) {
+                const z = document.createElement('div');
+                z.innerText = 'Z';
+                z.className = 'absolute text-indigo-300/20 font-serif font-bold animate-float';
+                z.style.left = Math.random() * 100 + '%';
+                z.style.fontSize = (Math.random() * 2 + 1) + 'rem';
+                z.style.animationDelay = (Math.random() * 10) + 's';
+                z.style.bottom = '-50px';
+                container.appendChild(z);
+            }
+        }
+
+        // Init
+        initBackground();
+        render();
+
+    </script>
+</body>
+</html>
